@@ -70,58 +70,59 @@ app.get('/auth/google/callback',
 
 // Sign Up Route
 app.post('/signup', async (req, res) => {
-  const { firstName, lastName, email, password, phone } = req.body;
-
-  // Validate password length
-  if (password.length < 8) {
-    return res.status(400).send('Password must be at least 8 characters long');
-  }
-
   try {
-    // Check if email already exists
+    console.log("Signup request received:", req.body);
+
+    const { firstName, lastName, email, password, mobile } = req.body;
+    if (!firstName || !lastName || !email || !password || !mobile) {
+      return res.status(400).send('All fields are required');
+    }
+
     const existingUser = await User.findOne({ email });
+    console.log("Existing user:", existingUser);
+
     if (existingUser) {
       return res.status(400).send('Email already exists');
     }
 
-    // Encrypt password
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("Password hashed successfully");
 
-    // Generate verification token
     const verificationToken = crypto.randomBytes(20).toString('hex');
 
-    // Create new user
     const newUser = new User({
       firstName,
       lastName,
       email,
       password: hashedPassword,
-      phone,
+      mobile,
       isVerified: false,
       isPhoneVerified: false,
       verificationToken,
     });
 
-    // Save user to database
     await newUser.save();
+    console.log("User saved successfully");
 
-    // Send verification email
     const verificationUrl = `http://localhost:${process.env.PORT}/verify-email/${verificationToken}`;
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
       subject: 'Email Verification',
-      text: `Please verify your email by clicking on the following link: ${verificationUrl}`,
+      text: `Verify your email: ${verificationUrl}`,
     };
 
     transporter.sendMail(mailOptions, (err, info) => {
       if (err) {
-        return res.status(500).send('Error sending email');
+        console.error("Email sending error:", err);
+        return res.status(500).send(`Error sending email: ${err.message}`);
       }
-      res.status(200).send('User created successfully, please check your email to verify your account');
+      res.status(200).send('User created successfully, check email');
     });
+
   } catch (error) {
-    res.status(500).send('Error during sign up');
+    console.error("Error during signup:", error);
+    res.status(500).send(error.message);
   }
 });
 
@@ -146,7 +147,7 @@ app.get('/verify-email/:token', async (req, res) => {
 
 // Mobile Verification Route (using Twilio)
 app.post('/verify-phone', async (req, res) => {
-  const { phone } = req.body;
+  const { mobile } = req.body;
   
   // Generate random OTP
   const otp = Math.floor(100000 + Math.random() * 900000);
@@ -156,7 +157,7 @@ app.post('/verify-phone', async (req, res) => {
     const message = await twilioClient.messages.create({
       body: `Your verification code is ${otp}`,
       from: process.env.TWILIO_PHONE_NUMBER,
-      to: phone,
+      to: mobile,
     });
 
     res.status(200).send('OTP sent successfully');
@@ -201,6 +202,6 @@ const options = {
 
 const PORT = process.env.PORT || 3000;
 
-https.createServer(options, app).listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
